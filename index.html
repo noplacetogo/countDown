@@ -331,7 +331,13 @@
       const [selectedCategory, setSelectedCategory] = useState('all');
       const [searchQuery, setSearchQuery] = useState('');
       const [viewMode, setViewMode] = useState('grid');
-      const [isSideOpen, setIsSideOpen] = useState(true);
+      const [isSideOpen, setIsSideOpen] = useState(() => {
+        try {
+          return window.innerWidth >= 1024;
+        } catch {
+          return true;
+        }
+      });
       const [activeTab, setActiveTab] = useState('basics');
       const [currentTime, setCurrentTime] = useState(new Date());
       const [newChecklist, setNewChecklist] = useState('');
@@ -664,22 +670,35 @@
               )}
             </main>
 
-            {/* Right Side: LIVE REAL-TIME EDITOR */}
+            {/* Right Side: LIVE REAL-TIME EDITOR (桌面端右側常駐，手機/平板全螢幕抽屜不切割畫面) */}
             {isSideOpen && selectedEvent && (
-              <aside className="w-96 shrink-0 h-full border-l border-zinc-800 bg-zinc-950/95 flex flex-col">
-                <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{selectedEvent.emoji}</span>
-                    <div>
-                      <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                        右側即時修正中
+              <>
+                {/* Mobile / Tablet Backdrop Overlay */}
+                <div
+                  className="fixed inset-0 bg-black/70 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+                  onClick={() => setIsSideOpen(false)}
+                  aria-label="點擊關閉側欄"
+                />
+                {/* Slide-over Drawer on Mobile / Docked on Desktop */}
+                <aside className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] max-w-full lg:static lg:z-20 lg:w-96 shrink-0 h-full border-l border-zinc-800 bg-zinc-950 shadow-2xl flex flex-col transition-all duration-200">
+                  <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{selectedEvent.emoji}</span>
+                      <div>
+                        <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                          即時編輯中
+                        </div>
+                        <h2 className="text-sm font-bold text-zinc-100 truncate max-w-[180px]">{selectedEvent.title}</h2>
                       </div>
-                      <h2 className="text-sm font-bold text-zinc-100 truncate max-w-[180px]">{selectedEvent.title}</h2>
                     </div>
+                    <button
+                      onClick={() => setIsSideOpen(false)}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold flex items-center gap-1"
+                    >
+                      關閉 ✕
+                    </button>
                   </div>
-                  <button onClick={() => setIsSideOpen(false)} className="text-zinc-400 hover:text-zinc-200 text-xs">✕</button>
-                </div>
 
                 {/* Tabs */}
                 <div className="grid grid-cols-3 border-b border-zinc-800 text-xs bg-zinc-900/30">
@@ -892,7 +911,8 @@
                   </button>
                 </div>
               </aside>
-            )}
+            </>
+          )}
           </div>
 
           {/* Share Poster Modal */}
