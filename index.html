@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chronos - 即時倒數日與紀念日 (單檔獨立版)</title>
+  <meta name="description" content="精美強大的倒數日與紀念日管理工具，單一 HTML 檔案隨開隨用，支援右側即時所見即所得編輯、多種風格與進度追蹤。" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- React 18 & Babel Standalone CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Canvas Confetti & Lucide Icons CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      background-color: #09090b;
+      color: #f4f4f5;
+      user-select: none;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #09090b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #27272a;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3f3f46;
+    }
+  </style>
+</head>
+<body class="antialiased selection:bg-emerald-500 selection:text-zinc-950">
+  <div id="root"></div>
+
+  <!-- React Application Source Code -->
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // --- TYPES & THEMES ---
+    const THEME_CONFIGS = {
+      obsidian: {
+        id: 'obsidian',
+        name: '黑曜極簡',
+        badgeBg: 'bg-zinc-800 text-zinc-200',
+        primary: 'text-zinc-100',
+        gradient: 'from-zinc-900 via-zinc-950 to-black',
+        glow: 'shadow-[0_0_35px_rgba(255,255,255,0.06)]',
+        progressColor: 'bg-zinc-200',
+      },
+      aurora: {
+        id: 'aurora',
+        name: '極光幻夜',
+        badgeBg: 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60',
+        primary: 'text-emerald-400',
+        gradient: 'from-emerald-950 via-teal-950 to-slate-950',
+        glow: 'shadow-[0_0_40px_rgba(16,185,129,0.18)]',
+        progressColor: 'bg-emerald-400',
+      },
+      sunset: {
+        id: 'sunset',
+        name: '暮光暖陽',
+        badgeBg: 'bg-amber-950/80 text-amber-300 border-amber-800/60',
+        primary: 'text-amber-400',
+        gradient: 'from-amber-950 via-stone-900 to-zinc-950',
+        glow: 'shadow-[0_0_40px_rgba(245,158,11,0.18)]',
+        progressColor: 'bg-amber-400',
+      },
+      emerald: {
+        id: 'emerald',
+        name: '靜謐森林',
+        badgeBg: 'bg-teal-950/80 text-teal-300 border-teal-800/60',
+        primary: 'text-teal-400',
+        gradient: 'from-teal-950 via-zinc-900 to-zinc-950',
+        glow: 'shadow-[0_0_40px_rgba(20,184,166,0.18)]',
+        progressColor: 'bg-teal-400',
+      },
+      indigo: {
+        id: 'indigo',
+        name: '深邃星雲',
+        badgeBg: 'bg-indigo-950/80 text-indigo-300 border-indigo-800/60',
+        primary: 'text-indigo-400',
+        gradient: 'from-indigo-950 via-slate-950 to-zinc-950',
+        glow: 'shadow-[0_0_40px_rgba(99,102,241,0.2)]',
+        progressColor: 'bg-indigo-400',
+      },
+      crimson: {
+        id: 'crimson',
+        name: '熾熱心跳',
+        badgeBg: 'bg-rose-950/80 text-rose-300 border-rose-800/60',
+        primary: 'text-rose-400',
+        gradient: 'from-rose-950 via-stone-900 to-zinc-950',
+        glow: 'shadow-[0_0_40px_rgba(244,63,94,0.18)]',
+        progressColor: 'bg-rose-500',
+      },
+      cyberpunk: {
+        id: 'cyberpunk',
+        name: '賽博未來',
+        badgeBg: 'bg-cyan-950/80 text-cyan-300 border-cyan-700/60',
+        primary: 'text-cyan-400',
+        gradient: 'from-cyan-950 via-purple-950 to-black',
+        glow: 'shadow-[0_0_45px_rgba(6,182,212,0.25)]',
+        progressColor: 'bg-cyan-400',
+      },
+    };
+
+    const CARD_STYLES = {
+      'modern-glass': 'backdrop-blur-md bg-zinc-900/80 border border-white/10 shadow-xl',
+      'bold-solid': 'bg-zinc-900 border-2 border-zinc-700 shadow-2xl',
+      'gradient-glow': 'bg-gradient-to-br border border-white/15 shadow-2xl',
+      minimalist: 'bg-zinc-900/50 border border-zinc-800',
+      'retro-flip': 'bg-zinc-950 border border-zinc-800 font-mono shadow-2xl',
+    };
+
+    const COMMON_EMOJIS = ['🎆', '🎂', '❤️', '✈️', '🚀', '📚', '🏃‍♂️', '🎯', '💍', '🏖️', '🎄', '🎁', '🎓', '🌟', '💼', '🌸'];
+
+    // --- TIME UTILITIES ---
+    function calculateWorkingDays(startDate, endDate) {
+      let count = 0;
+      const cur = new Date(startDate.getTime());
+      cur.setHours(0, 0, 0, 0);
+      const end = new Date(endDate.getTime());
+      end.setHours(0, 0, 0, 0);
+      if (cur > end) return 0;
+      while (cur <= end) {
+        const day = cur.getDay();
+        if (day !== 0 && day !== 6) count++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return count;
+    }
+
+    function calculateTime(event, currentTime = new Date()) {
+      const target = new Date(event.targetDate);
+      const start = new Date(event.startDate || event.targetDate);
+      const nowMs = currentTime.getTime();
+      const targetMs = target.getTime();
+      const startMs = start.getTime();
+
+      let diffMs = 0;
+      let isPast = false;
+
+      if (event.type === 'countup') {
+        diffMs = Math.max(0, nowMs - targetMs);
+        isPast = nowMs >= targetMs;
+      } else {
+        if (nowMs >= targetMs) {
+          isPast = true;
+          diffMs = Math.max(0, nowMs - targetMs);
+        } else {
+          isPast = false;
+          diffMs = targetMs - nowMs;
+        }
+      }
+
+      const totalSeconds = Math.floor(diffMs / 1000);
+      const totalMinutes = Math.floor(totalSeconds / 60);
+      const totalHours = Math.floor(totalMinutes / 60);
+      const totalDays = Math.floor(totalHours / 24);
+
+      const seconds = totalSeconds % 60;
+      const minutes = totalMinutes % 60;
+      const hours = totalHours % 24;
+
+      const workingDays = !isPast && event.type === 'countdown'
+        ? calculateWorkingDays(currentTime, target)
+        : calculateWorkingDays(target, currentTime);
+
+      let progressPercent = 0;
+      if (event.type === 'countdown') {
+        const span = targetMs - startMs;
+        if (span > 0) {
+          progressPercent = Math.min(100, Math.max(0, ((nowMs - startMs) / span) * 100));
+        } else {
+          progressPercent = isPast ? 100 : 0;
+        }
+      } else {
+        const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+        progressPercent = Math.min(100, Math.max(0, ((nowMs - targetMs) / oneYearMs) * 100));
+      }
+
+      return {
+        isPast,
+        totalDays,
+        hours,
+        minutes,
+        seconds,
+        workingDays,
+        progressPercent: Math.round(progressPercent * 10) / 10,
+      };
+    }
+
+    function formatDisplayDate(dateStr, includeTime = true) {
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        const y = d.getFullYear();
+        const m = (d.getMonth() + 1).toString().padStart(2, '0');
+        const day = d.getDate().toString().padStart(2, '0');
+        const weekDays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+        const weekDay = weekDays[d.getDay()];
+        if (!includeTime) return `${y}/${m}/${day} (${weekDay})`;
+        const hh = d.getHours().toString().padStart(2, '0');
+        const mm = d.getMinutes().toString().padStart(2, '0');
+        return `${y}年${m}月${day}日 ${hh}:${mm} (${weekDay})`;
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function toDateTimeLocal(d) {
+      const pad = (n) => n.toString().padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function triggerConfetti(type = 'cannon') {
+      if (typeof confetti === 'undefined') return;
+      if (type === 'fireworks') {
+        confetti({ particleCount: 100, spread: 360, origin: { y: 0.5 } });
+      } else {
+        confetti({ particleCount: 60, angle: 60, spread: 55, origin: { x: 0 } });
+        confetti({ particleCount: 60, angle: 120, spread: 55, origin: { x: 1 } });
+      }
+    }
+
+    // --- INITIAL DATA ---
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const INITIAL_EVENTS = [
+      {
+        id: 'evt-1',
+        title: '2027 跨年元旦倒數',
+        emoji: '🎆',
+        targetDate: `${curYear + 1}-01-01T00:00`,
+        startDate: `${curYear}-01-01T00:00`,
+        type: 'countdown',
+        category: 'holiday',
+        theme: 'aurora',
+        cardStyle: 'gradient-glow',
+        pinToHero: true,
+        notes: '向全新的自己問好，迎接新突破！',
+        quote: '每一個日出都是重生的機會，每一秒倒數都是期待的開始。',
+        checklist: [
+          { id: 'c1', text: '準備跨年聚會零食清單', completed: true },
+          { id: 'c2', text: '寫下新年目標願望清單', completed: false }
+        ],
+        customTags: ['跨年', '願望'],
+        excludeWeekends: false,
+      },
+      {
+        id: 'evt-2',
+        title: '東京賞楓與放鬆之旅 🍁',
+        emoji: '✈️',
+        targetDate: `${curYear}-11-18T09:30`,
+        startDate: `${curYear}-08-01T00:00`,
+        type: 'countdown',
+        category: 'travel',
+        theme: 'sunset',
+        cardStyle: 'modern-glass',
+        pinToHero: false,
+        notes: '入住新宿特色飯店，體驗秋季銀杏大道與溫泉。',
+        quote: '旅行不是為了逃避生活，而是為了不讓生活逃離我們。',
+        checklist: [
+          { id: 't1', text: '確認護照效期大於6個月', completed: true },
+          { id: 't2', text: '預訂車票與景點門票', completed: false }
+        ],
+        customTags: ['日本', '旅行'],
+        excludeWeekends: false,
+      },
+      {
+        id: 'evt-3',
+        title: '我們相遇相戀的日子',
+        emoji: '❤️',
+        targetDate: `${curYear - 2}-05-20T13:14`,
+        startDate: `${curYear - 2}-05-20T13:14`,
+        type: 'countup',
+        category: 'anniversary',
+        theme: 'crimson',
+        cardStyle: 'gradient-glow',
+        pinToHero: false,
+        notes: '感謝有你陪伴的每一天，平凡的日常無比珍貴。',
+        quote: '陪伴是最長情的告白，歲月靜好，與你同行。',
+        checklist: [
+          { id: 'l1', text: '預訂紀念日浪漫景觀餐廳', completed: true }
+        ],
+        customTags: ['紀念日', '浪漫'],
+        excludeWeekends: false,
+      }
+    ];
+
+    // --- MAIN APP COMPONENT ---
+    function App() {
+      const [events, setEvents] = useState(() => {
+        try {
+          const saved = localStorage.getItem('chronos_standalone_v1');
+          return saved ? JSON.parse(saved) : INITIAL_EVENTS;
+        } catch {
+          return INITIAL_EVENTS;
+        }
+      });
+
+      const [selectedId, setSelectedId] = useState(() => events[0]?.id || 'evt-1');
+      const [selectedCategory, setSelectedCategory] = useState('all');
+      const [searchQuery, setSearchQuery] = useState('');
+      const [viewMode, setViewMode] = useState('grid');
+      const [isSideOpen, setIsSideOpen] = useState(true);
+      const [activeTab, setActiveTab] = useState('basics');
+      const [currentTime, setCurrentTime] = useState(new Date());
+      const [newChecklist, setNewChecklist] = useState('');
+      const [sharePosterEvt, setSharePosterEvt] = useState(null);
+
+      useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      useEffect(() => {
+        localStorage.setItem('chronos_standalone_v1', JSON.stringify(events));
+      }, [events]);
+
+      const selectedEvent = useMemo(() => {
+        return events.find((e) => e.id === selectedId) || events[0] || null;
+      }, [events, selectedId]);
+
+      const heroEvent = useMemo(() => {
+        return events.find((e) => e.pinToHero) || selectedEvent || events[0] || null;
+      }, [events, selectedEvent]);
+
+      const heroTime = useMemo(() => {
+        return heroEvent ? calculateTime(heroEvent, currentTime) : null;
+      }, [heroEvent, currentTime]);
+
+      const filteredEvents = useMemo(() => {
+        return events.filter((e) => {
+          const matchCat = selectedCategory === 'all' || e.category === selectedCategory;
+          const matchQ = !searchQuery.trim() || e.title.toLowerCase().includes(searchQuery.toLowerCase());
+          return matchCat && matchQ;
+        });
+      }, [events, selectedCategory, searchQuery]);
+
+      const handleUpdateEvent = (updated) => {
+        setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+      };
+
+      const handleCreateNew = () => {
+        const d = new Date();
+        d.setDate(d.getDate() + 14);
+        const newEvt = {
+          id: 'evt-' + Date.now(),
+          title: '新倒數目標計畫',
+          emoji: '🎯',
+          targetDate: toDateTimeLocal(d),
+          startDate: toDateTimeLocal(new Date()),
+          type: 'countdown',
+          category: 'goal',
+          theme: 'emerald',
+          cardStyle: 'modern-glass',
+          pinToHero: false,
+          notes: '為新目標全力以赴！',
+          quote: '行百里者半九十，每天都是新的起點。',
+          checklist: [{ id: 'c-1', text: '準備第一階段規劃', completed: false }],
+          customTags: ['目標'],
+          excludeWeekends: false,
+        };
+        setEvents((prev) => [newEvt, ...prev]);
+        setSelectedId(newEvt.id);
+        setIsSideOpen(true);
+        triggerConfetti('cannon');
+      };
+
+      const handleDelete = (id) => {
+        const rem = events.filter((e) => e.id !== id);
+        setEvents(rem);
+        if (selectedId === id) setSelectedId(rem[0]?.id || '');
+      };
+
+      const handleDuplicate = (evt) => {
+        const dup = { ...evt, id: 'evt-' + Date.now(), title: `${evt.title} (副本)`, pinToHero: false };
+        setEvents((prev) => [dup, ...prev]);
+        setSelectedId(dup.id);
+        triggerConfetti('cannon');
+      };
+
+      const handleAddChecklist = (e) => {
+        e.preventDefault();
+        if (!newChecklist.trim() || !selectedEvent) return;
+        const item = { id: 'chk-' + Date.now(), text: newChecklist.trim(), completed: false };
+        handleUpdateEvent({ ...selectedEvent, checklist: [...(selectedEvent.checklist || []), item] });
+        setNewChecklist('');
+      };
+
+      const handleToggleChecklistItem = (evtId, chkId) => {
+        setEvents((prev) => prev.map((e) => {
+          if (e.id !== evtId) return e;
+          return {
+            ...e,
+            checklist: (e.checklist || []).map((c) => c.id === chkId ? { ...c, completed: !c.completed } : c)
+          };
+        }));
+      };
+
+      const heroTheme = THEME_CONFIGS[heroEvent?.theme || 'aurora'];
+
+      return (
+        <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100 font-sans">
+          {/* Top Bar */}
+          <header className="h-16 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shrink-0">
+            <div className="font-extrabold text-lg sm:text-xl tracking-tight text-zinc-100 flex items-center gap-2">
+              <span>Chronos 倒數日</span>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono hidden sm:inline">單檔獨立版</span>
+            </div>
+
+            <nav className="hidden md:flex items-center gap-1 px-3 py-1 bg-zinc-900/80 border border-zinc-800 rounded-full">
+              {[
+                { id: 'all', label: '全部' },
+                { id: 'holiday', label: '節日' },
+                { id: 'travel', label: '旅行' },
+                { id: 'anniversary', label: '紀念' },
+                { id: 'goal', label: '目標' }
+              ].map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedCategory(c.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    selectedCategory === c.id ? 'bg-zinc-100 text-zinc-900 font-semibold' : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => triggerConfetti('fireworks')}
+                title="慶祝放煙火"
+                className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold"
+              >
+                ✨ 放煙火
+              </button>
+              <button
+                onClick={() => setIsSideOpen(!isSideOpen)}
+                className={`p-2 rounded-xl border text-xs font-medium ${isSideOpen ? 'bg-emerald-950/60 border-emerald-600 text-emerald-300' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
+              >
+                {isSideOpen ? '收合側欄' : '編輯側欄'}
+              </button>
+              <button
+                onClick={handleCreateNew}
+                className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs shadow-sm"
+              >
+                + 新建倒數
+              </button>
+            </div>
+          </header>
+
+          {/* Main Layout */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Left Content Area */}
+            <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
+              {/* Hero Showcase */}
+              {heroEvent && heroTime && (
+                <div className={`relative overflow-hidden rounded-3xl p-6 sm:p-8 border ${CARD_STYLES[heroEvent.cardStyle] || CARD_STYLES['modern-glass']} ${heroTheme.glow}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                    <div className="flex items-center gap-3">
+                      <span className="text-4xl select-none">{heroEvent.emoji || '⏳'}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase ${heroTheme.badgeBg}`}>
+                            {heroEvent.type === 'countup' ? '紀念日' : '重點倒數'}
+                          </span>
+                          {heroEvent.excludeWeekends && (
+                            <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-950 text-amber-300 border border-amber-800">
+                              工作天倒數
+                            </span>
+                          )}
+                        </div>
+                        <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-100 mt-1">{heroEvent.title}</h1>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSharePosterEvt(heroEvent)}
+                        className="px-3 py-1.5 rounded-xl bg-zinc-800 text-zinc-200 text-xs border border-zinc-700 hover:bg-zinc-700"
+                      >
+                        分享海報
+                      </button>
+                      <button
+                        onClick={() => { setSelectedId(heroEvent.id); setIsSideOpen(true); }}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium"
+                      >
+                        在右側編輯
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4 Numbers Blocks */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 my-6">
+                    <div className="p-4 rounded-2xl bg-zinc-950/70 border border-white/10 text-center">
+                      <div className="text-4xl sm:text-5xl font-black text-zinc-100 tabular-nums">{heroTime.totalDays}</div>
+                      <div className="text-[11px] font-bold text-zinc-400 uppercase mt-1">
+                        {heroEvent.type === 'countup' ? '已過天數' : '剩餘天數'}
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-zinc-950/70 border border-white/10 text-center">
+                      <div className="text-4xl sm:text-5xl font-black text-zinc-200 tabular-nums">{heroTime.hours.toString().padStart(2, '0')}</div>
+                      <div className="text-[11px] font-bold text-zinc-400 uppercase mt-1">小時</div>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-zinc-950/70 border border-white/10 text-center">
+                      <div className="text-4xl sm:text-5xl font-black text-zinc-200 tabular-nums">{heroTime.minutes.toString().padStart(2, '0')}</div>
+                      <div className="text-[11px] font-bold text-zinc-400 uppercase mt-1">分鐘</div>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-zinc-950/70 border border-white/10 text-center">
+                      <div className="text-4xl sm:text-5xl font-black text-emerald-400 tabular-nums">{heroTime.seconds.toString().padStart(2, '0')}</div>
+                      <div className="text-[11px] font-bold text-emerald-400 mt-1">秒 (即時倒數)</div>
+                    </div>
+                  </div>
+
+                  {/* Progress & Info */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-zinc-400">
+                      <span>目標日：{formatDisplayDate(heroEvent.targetDate)}</span>
+                      <span>進度 {heroTime.progressPercent}%</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-zinc-900 border border-zinc-800 overflow-hidden">
+                      <div className={`h-full ${heroTheme.progressColor}`} style={{ width: `${heroTime.progressPercent}%` }} />
+                    </div>
+                  </div>
+
+                  {heroEvent.quote && (
+                    <div className="mt-4 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs italic text-zinc-300">
+                      「{heroEvent.quote}」
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Controls Bar */}
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜尋倒數名稱..."
+                  className="px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 w-64 focus:outline-none focus:border-emerald-500"
+                />
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${viewMode === 'grid' ? 'bg-zinc-800 text-zinc-100 border-zinc-700' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
+                  >
+                    網格卡片
+                  </button>
+                  <button
+                    onClick={() => setViewMode('timeline')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${viewMode === 'timeline' ? 'bg-zinc-800 text-zinc-100 border-zinc-700' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
+                  >
+                    時間軸
+                  </button>
+                </div>
+              </div>
+
+              {/* Card List or Timeline */}
+              {viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {filteredEvents.map((evt) => {
+                    const time = calculateTime(evt, currentTime);
+                    const isEditing = selectedId === evt.id;
+                    const thm = THEME_CONFIGS[evt.theme || 'obsidian'];
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={() => { setSelectedId(evt.id); setIsSideOpen(true); }}
+                        className={`p-5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${CARD_STYLES[evt.cardStyle] || CARD_STYLES['modern-glass']} ${isEditing ? 'ring-2 ring-emerald-400 border-emerald-500 bg-zinc-900/90' : 'hover:border-zinc-700 hover:bg-zinc-900/70'}`}
+                      >
+                        <div>
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl">{evt.emoji}</span>
+                              <div>
+                                <h3 className="font-bold text-sm text-zinc-100">{evt.title}</h3>
+                                <p className="text-[11px] text-zinc-400">{formatDisplayDate(evt.targetDate, false)}</p>
+                              </div>
+                            </div>
+                            {evt.pinToHero && <span className="text-amber-400 text-xs font-bold">📌 置頂</span>}
+                          </div>
+
+                          <div className="my-3 py-2 border-y border-zinc-800 flex justify-between items-baseline">
+                            <div className="text-3xl font-black text-zinc-100 tabular-nums">
+                              {time.totalDays}
+                              <span className="text-xs font-normal text-zinc-500 ml-1">{evt.type === 'countup' ? '天前' : '天後'}</span>
+                            </div>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${thm.badgeBg}`}>
+                              {evt.type === 'countup' ? '紀念日' : '進度 ' + time.progressPercent + '%'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-xs text-zinc-500 pt-1">
+                          <span>{evt.checklist?.length ? `${evt.checklist.filter(c => c.completed).length}/${evt.checklist.length} 待辦` : '倒數事件'}</span>
+                          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => setSharePosterEvt(evt)} className="hover:text-zinc-200">分享</button>
+                            <button onClick={() => handleDuplicate(evt)} className="hover:text-zinc-200">複製</button>
+                            <button onClick={() => handleDelete(evt.id)} className="hover:text-rose-400">刪除</button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-6 rounded-3xl bg-zinc-900/40 border border-zinc-800 space-y-4">
+                  {filteredEvents.map((evt) => {
+                    const time = calculateTime(evt, currentTime);
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={() => { setSelectedId(evt.id); setIsSideOpen(true); }}
+                        className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 flex items-center justify-between cursor-pointer hover:border-zinc-700"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{evt.emoji}</span>
+                          <div>
+                            <div className="font-bold text-sm text-zinc-100">{evt.title}</div>
+                            <div className="text-xs text-zinc-400">{formatDisplayDate(evt.targetDate)}</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xl font-bold text-zinc-100">{time.totalDays} 天</div>
+                          <div className="text-[11px] text-zinc-500">進度 {time.progressPercent}%</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </main>
+
+            {/* Right Side: LIVE REAL-TIME EDITOR */}
+            {isSideOpen && selectedEvent && (
+              <aside className="w-96 shrink-0 h-full border-l border-zinc-800 bg-zinc-950/95 flex flex-col">
+                <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{selectedEvent.emoji}</span>
+                    <div>
+                      <div className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        右側即時修正中
+                      </div>
+                      <h2 className="text-sm font-bold text-zinc-100 truncate max-w-[180px]">{selectedEvent.title}</h2>
+                    </div>
+                  </div>
+                  <button onClick={() => setIsSideOpen(false)} className="text-zinc-400 hover:text-zinc-200 text-xs">✕</button>
+                </div>
+
+                {/* Tabs */}
+                <div className="grid grid-cols-3 border-b border-zinc-800 text-xs bg-zinc-900/30">
+                  {['basics', 'style', 'tasks'].map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`py-2.5 font-medium border-b-2 text-center transition-all ${
+                        activeTab === tab ? 'border-emerald-500 text-emerald-400 font-semibold' : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      {tab === 'basics' && '基本設定'}
+                      {tab === 'style' && '外觀風格'}
+                      {tab === 'tasks' && `清單 (${selectedEvent.checklist?.length || 0})`}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Form Content */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+                  {activeTab === 'basics' && (
+                    <>
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-medium">事件標題 (即時反映)</label>
+                        <input
+                          type="text"
+                          value={selectedEvent.title}
+                          onChange={(e) => handleUpdateEvent({ ...selectedEvent, title: e.target.value })}
+                          className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-medium">更換 Emoji 圖示</label>
+                        <div className="grid grid-cols-8 gap-1 p-2 bg-zinc-900 rounded-lg border border-zinc-800">
+                          {COMMON_EMOJIS.map((em) => (
+                            <button
+                              key={em}
+                              onClick={() => handleUpdateEvent({ ...selectedEvent, emoji: em })}
+                              className={`h-7 rounded flex items-center justify-center text-base hover:bg-zinc-800 ${selectedEvent.emoji === em ? 'ring-2 ring-emerald-400 bg-zinc-700' : ''}`}
+                            >
+                              {em}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-medium">模式 (倒數 vs 累積紀念)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handleUpdateEvent({ ...selectedEvent, type: 'countdown' })}
+                            className={`py-2 rounded-lg border text-center ${selectedEvent.type === 'countdown' ? 'bg-emerald-950 border-emerald-600 text-emerald-300 font-bold' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
+                          >
+                            未來倒數日
+                          </button>
+                          <button
+                            onClick={() => handleUpdateEvent({ ...selectedEvent, type: 'countup' })}
+                            className={`py-2 rounded-lg border text-center ${selectedEvent.type === 'countup' ? 'bg-rose-950 border-rose-600 text-rose-300 font-bold' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
+                          >
+                            已過紀念日
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-medium">目標日期與時間</label>
+                        <input
+                          type="datetime-local"
+                          value={selectedEvent.targetDate.slice(0, 16)}
+                          onChange={(e) => handleUpdateEvent({ ...selectedEvent, targetDate: e.target.value })}
+                          className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
+                        <span className="text-zinc-300">設為頂部主視覺焦點</span>
+                        <input
+                          type="checkbox"
+                          checked={selectedEvent.pinToHero}
+                          onChange={(e) => handleUpdateEvent({ ...selectedEvent, pinToHero: e.target.checked })}
+                          className="w-4 h-4 rounded accent-emerald-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-300">排除週末 (僅計工作天)</span>
+                        <input
+                          type="checkbox"
+                          checked={selectedEvent.excludeWeekends}
+                          onChange={(e) => handleUpdateEvent({ ...selectedEvent, excludeWeekends: e.target.checked })}
+                          className="w-4 h-4 rounded accent-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-medium">激勵寄語 / 金句</label>
+                        <input
+                          type="text"
+                          value={selectedEvent.quote || ''}
+                          onChange={(e) => handleUpdateEvent({ ...selectedEvent, quote: e.target.value })}
+                          placeholder="例如：所有的努力都不會被辜負"
+                          className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-100 text-xs"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {activeTab === 'style' && (
+                    <>
+                      <div>
+                        <label className="block text-zinc-400 mb-2 font-medium">色彩調色盤</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.keys(THEME_CONFIGS).map((tk) => (
+                            <button
+                              key={tk}
+                              onClick={() => handleUpdateEvent({ ...selectedEvent, theme: tk })}
+                              className={`p-2 rounded-lg border text-left flex items-center gap-2 ${selectedEvent.theme === tk ? 'border-emerald-500 bg-zinc-800 ring-1 ring-emerald-500' : 'border-zinc-800 bg-zinc-900'}`}
+                            >
+                              <div className={`w-4 h-4 rounded-full bg-gradient-to-tr ${THEME_CONFIGS[tk].gradient}`} />
+                              <span className="text-zinc-200">{THEME_CONFIGS[tk].name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-400 mb-2 font-medium">卡片材質外觀</label>
+                        <div className="space-y-1.5">
+                          {[
+                            { id: 'modern-glass', label: '現代毛玻璃' },
+                            { id: 'gradient-glow', label: '流光漸變' },
+                            { id: 'bold-solid', label: '純色幾何' },
+                            { id: 'retro-flip', label: '復古機械翻牌' },
+                            { id: 'minimalist', label: '極簡線框' }
+                          ].map((st) => (
+                            <button
+                              key={st.id}
+                              onClick={() => handleUpdateEvent({ ...selectedEvent, cardStyle: st.id })}
+                              className={`w-full p-2.5 rounded-lg border text-left flex justify-between items-center ${selectedEvent.cardStyle === st.id ? 'border-emerald-500 bg-zinc-800 text-zinc-100 font-bold' : 'border-zinc-800 bg-zinc-900 text-zinc-400'}`}
+                            >
+                              <span>{st.label}</span>
+                              {selectedEvent.cardStyle === st.id && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {activeTab === 'tasks' && (
+                    <div className="space-y-3">
+                      <form onSubmit={handleAddChecklist} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newChecklist}
+                          onChange={(e) => setNewChecklist(e.target.value)}
+                          placeholder="新增待辦準備項目..."
+                          className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-zinc-100 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                        <button type="submit" className="px-3 py-2 bg-emerald-600 text-white rounded-lg font-bold">
+                          +
+                        </button>
+                      </form>
+
+                      <div className="space-y-1.5">
+                        {selectedEvent.checklist?.map((c) => (
+                          <div
+                            key={c.id}
+                            className={`flex items-center justify-between p-2 rounded-lg border ${c.completed ? 'bg-zinc-900/40 border-zinc-800/60 line-through text-zinc-500' : 'bg-zinc-900 border-zinc-700 text-zinc-200'}`}
+                          >
+                            <label className="flex items-center gap-2 cursor-pointer flex-1">
+                              <input
+                                type="checkbox"
+                                checked={c.completed}
+                                onChange={() => handleToggleChecklistItem(selectedEvent.id, c.id)}
+                                className="rounded accent-emerald-500"
+                              />
+                              <span>{c.text}</span>
+                            </label>
+                            <button
+                              onClick={() => {
+                                const rem = selectedEvent.checklist.filter(i => i.id !== c.id);
+                                handleUpdateEvent({ ...selectedEvent, checklist: rem });
+                              }}
+                              className="text-zinc-500 hover:text-rose-400 px-1"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom delete action */}
+                <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-between">
+                  <button
+                    onClick={() => handleDuplicate(selectedEvent)}
+                    className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700"
+                  >
+                    複製此事件
+                  </button>
+                  <button
+                    onClick={() => handleDelete(selectedEvent.id)}
+                    className="px-3 py-1.5 rounded-lg bg-rose-950 text-rose-300 text-xs border border-rose-800 hover:bg-rose-900"
+                  >
+                    刪除事件
+                  </button>
+                </div>
+              </aside>
+            )}
+          </div>
+
+          {/* Share Poster Modal */}
+          {sharePosterEvt && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-sm w-full p-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-sm text-zinc-100">分享倒數卡片</h3>
+                  <button onClick={() => setSharePosterEvt(null)} className="text-zinc-400 hover:text-zinc-200">✕</button>
+                </div>
+                <div className="p-6 rounded-xl bg-zinc-950 border border-zinc-800 text-center space-y-2">
+                  <div className="text-4xl">{sharePosterEvt.emoji}</div>
+                  <div className="font-bold text-lg text-zinc-100">{sharePosterEvt.title}</div>
+                  <div className="text-xs text-zinc-400">{formatDisplayDate(sharePosterEvt.targetDate, false)}</div>
+                  <div className="text-4xl font-black text-emerald-400 py-2">
+                    {calculateTime(sharePosterEvt, currentTime).totalDays} 天
+                  </div>
+                  {sharePosterEvt.quote && <p className="text-xs italic text-zinc-300">「{sharePosterEvt.quote}」</p>}
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`【${sharePosterEvt.title}】倒數還有 ${calculateTime(sharePosterEvt, currentTime).totalDays} 天！目標日：${formatDisplayDate(sharePosterEvt.targetDate)}`);
+                    alert('已複製倒數文字至剪貼簿！');
+                  }}
+                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold"
+                >
+                  複製分享文字
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
